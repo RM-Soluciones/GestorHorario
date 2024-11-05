@@ -9,9 +9,7 @@ export default function RegistroHoras() {
   const [formData, setFormData] = useState({
     empleadoId: '',
     fecha: new Date().toISOString().substr(0, 10),
-    timeIntervals: [
-      { horaEntrada: '', horaSalida: '' },
-    ],
+    timeIntervals: [{ horaEntrada: '', horaSalida: '' }],
     tipoDia: 'Trabajo',
     trabajoEnFeriado: false,
   });
@@ -20,15 +18,10 @@ export default function RegistroHoras() {
 
   useEffect(() => {
     const fetchEmpleados = async () => {
-      const { data, error } = await supabase
+      const { data } = await supabase
         .from('empleados')
         .select('id, nombre, apellido');
-
-      if (error) {
-        console.error('Error al obtener empleados:', error);
-      } else {
-        setEmpleados(data);
-      }
+      setEmpleados(data || []);
     };
 
     fetchEmpleados();
@@ -58,7 +51,10 @@ export default function RegistroHoras() {
   };
 
   const handleEmpleadoChange = (selectedOption) => {
-    setFormData({ ...formData, empleadoId: selectedOption ? selectedOption.value : '' });
+    setFormData({
+      ...formData,
+      empleadoId: selectedOption ? selectedOption.value : '',
+    });
   };
 
   const handleTimeIntervalChange = (index, e) => {
@@ -91,7 +87,10 @@ export default function RegistroHoras() {
       return;
     }
 
-    if ((tipoDia === 'Trabajo' || (tipoDia === 'Feriado' && trabajoEnFeriado)) && timeIntervals.length === 0) {
+    if (
+      (tipoDia === 'Trabajo' || (tipoDia === 'Feriado' && trabajoEnFeriado)) &&
+      timeIntervals.length === 0
+    ) {
       alert('Debes agregar al menos un intervalo de horas.');
       return;
     }
@@ -105,36 +104,37 @@ export default function RegistroHoras() {
       trabajo_en_feriado: trabajoEnFeriado,
     }));
 
-    const { data, error } = await supabase.from('registros_horas').insert(registros);
+    const { error } = await supabase.from('registros_horas').insert(registros);
 
     if (error) {
       console.error('Error al insertar registro:', error);
+      alert('Error al guardar el registro.');
     } else {
-      console.log('Registro insertado:', data);
       setFormData({
         empleadoId: '',
         fecha: new Date().toISOString().substr(0, 10),
-        timeIntervals: [
-          { horaEntrada: '', horaSalida: '' },
-        ],
+        timeIntervals: [{ horaEntrada: '', horaSalida: '' }],
         tipoDia: 'Trabajo',
         trabajoEnFeriado: false,
       });
+      alert('Registro guardado exitosamente.');
     }
   };
 
   return (
-    <div className="container mx-auto p-4">
-      <h2 className="text-2xl font-bold mb-4">Registrar Horas</h2>
-      <form onSubmit={handleSubmit} className="space-y-4">
+    <div>
+      <h2 className="text-2xl font-semibold mb-6">Registrar Horas</h2>
+      <form onSubmit={handleSubmit} className="space-y-6">
         {/* Empleado */}
         <div>
-          <label className="block">Empleado</label>
+          <label className="label">Empleado</label>
           <Select
             name="empleadoId"
             options={opcionesEmpleados}
             onChange={handleEmpleadoChange}
-            value={opcionesEmpleados.find(option => option.value === formData.empleadoId) || null}
+            value={opcionesEmpleados.find(
+              (option) => option.value === formData.empleadoId
+            ) || null}
             className="mt-1"
             placeholder="Selecciona un empleado"
             isClearable
@@ -143,25 +143,25 @@ export default function RegistroHoras() {
 
         {/* Fecha */}
         <div>
-          <label className="block">Fecha</label>
+          <label className="label">Fecha</label>
           <input
             type="date"
             name="fecha"
             value={formData.fecha}
             onChange={handleChange}
-            className="mt-1 block w-full border-gray-300 rounded-md"
+            className="input"
             required
           />
         </div>
 
         {/* Tipo de Día */}
         <div>
-          <label className="block">Tipo de Día</label>
+          <label className="label">Tipo de Día</label>
           <select
             name="tipoDia"
             value={formData.tipoDia}
             onChange={handleChange}
-            className="mt-1 block w-full border-gray-300 rounded-md"
+            className="input"
             required
           >
             {tiposDia.map((tipo) => (
@@ -174,62 +174,59 @@ export default function RegistroHoras() {
 
         {/* Trabajo en Feriado */}
         {formData.tipoDia === 'Feriado' && (
-          <div>
-            <label className="inline-flex items-center mt-3">
-              <input
-                type="checkbox"
-                name="trabajoEnFeriado"
-                checked={formData.trabajoEnFeriado}
-                onChange={handleChange}
-                className="form-checkbox h-5 w-5 text-blue-600"
-              />
-              <span className="ml-2 text-gray-700">Trabajó en Feriado</span>
-            </label>
+          <div className="flex items-center">
+            <input
+              type="checkbox"
+              name="trabajoEnFeriado"
+              checked={formData.trabajoEnFeriado}
+              onChange={handleChange}
+              className="form-checkbox h-5 w-5 text-accent"
+            />
+            <label className="ml-2 label">Trabajó en Feriado</label>
           </div>
         )}
 
         {/* Horas */}
-        {(formData.tipoDia === 'Trabajo' || (formData.tipoDia === 'Feriado' && formData.trabajoEnFeriado)) && formData.timeIntervals.map((intervalo, index) => (
-          <div key={index} className="grid grid-cols-1 md:grid-cols-2 gap-4 items-end">
-            <div>
-              <label className="block">Hora de Entrada</label>
-              <input
-                type="time"
-                name="horaEntrada"
-                value={intervalo.horaEntrada}
-                onChange={(e) => handleTimeIntervalChange(index, e)}
-                className="mt-1 block w-full border-gray-300 rounded-md"
-              />
+        {(formData.tipoDia === 'Trabajo' ||
+          (formData.tipoDia === 'Feriado' && formData.trabajoEnFeriado)) &&
+          formData.timeIntervals.map((intervalo, index) => (
+            <div key={index} className="grid grid-cols-1 md:grid-cols-3 gap-4 items-end">
+              <div>
+                <label className="label">Hora de Entrada</label>
+                <input
+                  type="time"
+                  name="horaEntrada"
+                  value={intervalo.horaEntrada}
+                  onChange={(e) => handleTimeIntervalChange(index, e)}
+                  className="input"
+                />
+              </div>
+              <div>
+                <label className="label">Hora de Salida</label>
+                <input
+                  type="time"
+                  name="horaSalida"
+                  value={intervalo.horaSalida}
+                  onChange={(e) => handleTimeIntervalChange(index, e)}
+                  className="input"
+                />
+              </div>
+              <div>
+                <button
+                  type="button"
+                  onClick={() => removeTimeInterval(index)}
+                  className="btn btn-danger"
+                >
+                  Eliminar
+                </button>
+              </div>
             </div>
-            <div>
-              <label className="block">Hora de Salida</label>
-              <input
-                type="time"
-                name="horaSalida"
-                value={intervalo.horaSalida}
-                onChange={(e) => handleTimeIntervalChange(index, e)}
-                className="mt-1 block w-full border-gray-300 rounded-md"
-              />
-            </div>
-            <div>
-              <button
-                type="button"
-                onClick={() => removeTimeInterval(index)}
-                className="px-2 py-1 bg-red-500 text-white rounded-md hover:bg-red-600"
-              >
-                Eliminar
-              </button>
-            </div>
-          </div>
-        ))}
+          ))}
 
-        {(formData.tipoDia === 'Trabajo' || (formData.tipoDia === 'Feriado' && formData.trabajoEnFeriado)) && (
+        {(formData.tipoDia === 'Trabajo' ||
+          (formData.tipoDia === 'Feriado' && formData.trabajoEnFeriado)) && (
           <div>
-            <button
-              type="button"
-              onClick={addTimeInterval}
-              className="mt-2 px-4 py-2 bg-green-500 text-white rounded-md hover:bg-green-600"
-            >
+            <button type="button" onClick={addTimeInterval} className="btn btn-secondary">
               Agregar Horario
             </button>
           </div>
@@ -237,7 +234,7 @@ export default function RegistroHoras() {
 
         {/* Botón */}
         <div>
-          <button type="submit" className="btn-primary">
+          <button type="submit" className="btn btn-primary">
             Guardar Registro
           </button>
         </div>

@@ -1,27 +1,43 @@
+/* app/globals.css */
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
-/* Estilos globales */
+/* Estilos globales personalizados */
 body {
-  @apply bg-gris-claro text-gris-oscuro;
-  font-family: 'Inter', sans-serif;
+  @apply bg-background text-textPrimary font-sans;
 }
 
 h1, h2, h3, h4, h5, h6 {
-  @apply text-azul-oscuro;
+  @apply text-textPrimary font-semibold;
 }
 
 a {
-  @apply text-azul hover:underline;
+  @apply text-accent hover:underline;
+}
+
+.btn {
+  @apply inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm;
 }
 
 .btn-primary {
-  @apply px-4 py-2 bg-naranja text-white rounded-md hover:bg-naranja-oscuro;
+  @apply bg-accent text-white hover:bg-indigo-600;
 }
 
 .btn-secondary {
-  @apply px-4 py-2 bg-azul text-white rounded-md hover:bg-azul-oscuro;
+  @apply bg-secondary text-white hover:bg-gray-700;
+}
+
+.btn-danger {
+  @apply bg-danger text-white hover:bg-red-600;
+}
+
+.input {
+  @apply mt-1 block w-full border border-border rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-accent focus:border-accent;
+}
+
+.label {
+  @apply block text-sm font-medium text-textSecondary;
 }
 
 .table {
@@ -29,13 +45,17 @@ a {
 }
 
 .table-header {
-  @apply bg-gris-claro;
+  @apply bg-gray-100;
 }
 
 .table-cell {
-  @apply py-2 px-4 border-b text-left;
+  @apply px-6 py-4 whitespace-nowrap text-sm text-textPrimary;
 }
 
 .table-row:hover {
-  @apply bg-gris-claro;
+  @apply bg-gray-50;
+}
+
+.container {
+  @apply max-w-7xl mx-auto px-4 sm:px-6 lg:px-8;
 }

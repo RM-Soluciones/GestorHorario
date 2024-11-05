@@ -10,9 +10,9 @@ export const metadata = {
 export default function RootLayout({ children }) {
   return (
     <html lang="es">
-      <body className="bg-gris-claro">
+      <body>
         <NavBar />
-        {children}
+        <main className="container py-6">{children}</main>
       </body>
     </html>
   );

@@ -1,3 +1,4 @@
+// app/empleados/page.js
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -13,16 +14,11 @@ export default function GestionEmpleados() {
   }, []);
 
   const fetchEmpleados = async () => {
-    const { data, error } = await supabase
+    const { data } = await supabase
       .from('empleados')
       .select('*')
       .order('apellido', { ascending: true });
-
-    if (error) {
-      console.error('Error al obtener empleados:', error);
-    } else {
-      setEmpleados(data);
-    }
+    setEmpleados(data || []);
   };
 
   const agregarEmpleado = async (e) => {
@@ -42,6 +38,7 @@ export default function GestionEmpleados() {
 
     if (error) {
       console.error('Error al agregar empleado:', error);
+      alert('Error al agregar empleado.');
     } else {
       setNombre('');
       setApellido('');
@@ -53,13 +50,11 @@ export default function GestionEmpleados() {
     const confirmacion = confirm('¿Estás seguro de que deseas eliminar este empleado?');
 
     if (confirmacion) {
-      const { error } = await supabase
-        .from('empleados')
-        .delete()
-        .eq('id', id);
+      const { error } = await supabase.from('empleados').delete().eq('id', id);
 
       if (error) {
         console.error('Error al eliminar empleado:', error);
+        alert('Error al eliminar empleado.');
       } else {
         fetchEmpleados();
       }
@@ -67,34 +62,34 @@ export default function GestionEmpleados() {
   };
 
   return (
-    <div className="container mx-auto p-4">
-      <h2 className="text-2xl font-bold mb-4">Gestión de Empleados</h2>
+    <div>
+      <h2 className="text-2xl font-semibold mb-6">Gestión de Empleados</h2>
 
       {/* Formulario para agregar empleado */}
-      <form onSubmit={agregarEmpleado} className="mb-4">
-        <div className="flex flex-col md:flex-row md:space-x-4">
-          <div className="flex-1 mb-2 md:mb-0">
-            <label className="block">Nombre</label>
+      <form onSubmit={agregarEmpleado} className="mb-6 space-y-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
+            <label className="label">Nombre</label>
             <input
               type="text"
               value={nombre}
               onChange={(e) => setNombre(e.target.value)}
-              className="mt-1 block w-full border-gray-300 rounded-md"
+              className="input"
               required
             />
           </div>
-          <div className="flex-1">
-            <label className="block">Apellido</label>
+          <div>
+            <label className="label">Apellido</label>
             <input
               type="text"
               value={apellido}
               onChange={(e) => setApellido(e.target.value)}
-              className="mt-1 block w-full border-gray-300 rounded-md"
+              className="input"
               required
             />
           </div>
         </div>
-        <button type="submit" className="btn-primary mt-2">
+        <button type="submit" className="btn btn-primary">
           Agregar Empleado
         </button>
       </form>
@@ -117,7 +112,7 @@ export default function GestionEmpleados() {
                 <td className="table-cell">
                   <button
                     onClick={() => eliminarEmpleado(empleado.id)}
-                    className="px-2 py-1 bg-rojo text-white rounded-md hover:bg-rojo-oscuro"
+                    className="btn btn-danger"
                   >
                     Eliminar
                   </button>
