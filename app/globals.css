@@ -1,0 +1,41 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Estilos globales */
+body {
+  @apply bg-gris-claro text-gris-oscuro;
+  font-family: 'Inter', sans-serif;
+}
+
+h1, h2, h3, h4, h5, h6 {
+  @apply text-azul-oscuro;
+}
+
+a {
+  @apply text-azul hover:underline;
+}
+
+.btn-primary {
+  @apply px-4 py-2 bg-naranja text-white rounded-md hover:bg-naranja-oscuro;
+}
+
+.btn-secondary {
+  @apply px-4 py-2 bg-azul text-white rounded-md hover:bg-azul-oscuro;
+}
+
+.table {
+  @apply min-w-full bg-white;
+}
+
+.table-header {
+  @apply bg-gris-claro;
+}
+
+.table-cell {
+  @apply py-2 px-4 border-b text-left;
+}
+
+.table-row:hover {
+  @apply bg-gris-claro;
+}
