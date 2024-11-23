@@ -1,7 +1,7 @@
 // app/reportes/page.js
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { supabase } from '../../utils/supabaseClient';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
@@ -10,10 +10,38 @@ export default function Reportes() {
   const [empleados, setEmpleados] = useState([]);
   const [reportes, setReportes] = useState([]);
   const [empleadoSeleccionado, setEmpleadoSeleccionado] = useState(null);
-  const [fechaInicio, setFechaInicio] = useState('');
-  const [fechaFin, setFechaFin] = useState('');
-  const [totales, setTotales] = useState({});
 
+  // Inicializar selectedMonthYear al mes y año actuales en formato 'YYYY-MM'
+  const today = new Date();
+  const [selectedMonthYear, setSelectedMonthYear] = useState(
+    today.toISOString().substr(0, 7)
+  );
+
+  // Estados para las fechas de inicio y fin
+  const [fechaInicio, setFechaInicio] = useState(
+    new Date(today.getFullYear(), today.getMonth(), 1)
+      .toISOString()
+      .split('T')[0]
+  );
+  const [fechaFin, setFechaFin] = useState(
+    new Date(today.getFullYear(), today.getMonth() + 1, 0)
+      .toISOString()
+      .split('T')[0]
+  );
+
+  // Estados para selección de reportes y edición
+  const [reportesSeleccionados, setReportesSeleccionados] = useState([]);
+  const [isEditarModalOpen, setIsEditarModalOpen] = useState(false);
+  const [reporteAEditar, setReporteAEditar] = useState(null);
+  const [formValues, setFormValues] = useState({
+    fecha: '',
+    hora_entrada: '',
+    hora_salida: '',
+    tipo_dia: '',
+    trabajo_en_feriado: false,
+  });
+
+  // Fetch empleados al montar el componente
   useEffect(() => {
     const fetchEmpleados = async () => {
       const { data, error } = await supabase
@@ -30,7 +58,17 @@ export default function Reportes() {
     fetchEmpleados();
   }, []);
 
-  const fetchReportes = async () => {
+  // Actualizar fechas al cambiar el mes seleccionado
+  useEffect(() => {
+    const [year, month] = selectedMonthYear.split('-').map(Number);
+    const inicio = new Date(year, month - 1, 1);
+    const fin = new Date(year, month, 0);
+    setFechaInicio(inicio.toISOString().split('T')[0]);
+    setFechaFin(fin.toISOString().split('T')[0]);
+  }, [selectedMonthYear]);
+
+  // Función para filtrar reportes
+  const filtrarReportes = async () => {
     let query = supabase.from('registros_horas').select(`
       id,
       empleado_id,
@@ -49,31 +87,30 @@ export default function Reportes() {
       query = query.eq('empleado_id', empleadoSeleccionado);
     }
 
-    if (fechaInicio) {
-      query = query.gte('fecha', fechaInicio);
-    }
-
-    if (fechaFin) {
-      query = query.lte('fecha', fechaFin);
-    }
+    query = query
+      .gte('fecha', fechaInicio)
+      .lte('fecha', fechaFin);
 
     const { data, error } = await query.order('fecha', { ascending: true });
 
     if (error) {
       console.error('Error al obtener reportes:', error);
+      alert('Error al obtener reportes.');
     } else {
       setReportes(data);
-      calcularTotales(data);
+      setReportesSeleccionados([]); // Limpiar selección al filtrar
     }
   };
 
+  // Inicializar los reportes al cargar el componente
   useEffect(() => {
-    fetchReportes();
-  }, [empleadoSeleccionado, fechaInicio, fechaFin]);
+    filtrarReportes();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
-  const calcularTotales = (reportes) => {
+  // Calcular totales cada vez que 'reportes' cambie
+  const totales = useMemo(() => {
     const totalesTemp = {};
-
     const diasUnicos = {};
 
     reportes.forEach((registro) => {
@@ -81,7 +118,6 @@ export default function Reportes() {
       const tipoDia = registro.tipo_dia;
       const trabajoEnFeriado = registro.trabajo_en_feriado;
 
-      // Si no existe la fecha, inicializar
       if (!diasUnicos[fecha]) {
         diasUnicos[fecha] = {
           tipoDia: tipoDia,
@@ -89,7 +125,6 @@ export default function Reportes() {
           horasTrabajadas: 0,
         };
       } else {
-        // Definir prioridad de tipo de día
         const prioridad = {
           'Falta Injustificada': 1,
           'Falta Justificada': 2,
@@ -106,13 +141,11 @@ export default function Reportes() {
           diasUnicos[fecha].tipoDia = tipoDia;
         }
 
-        // Si es trabajo en feriado, marcarlo
         if (tipoDia === 'Feriado' && trabajoEnFeriado) {
           diasUnicos[fecha].trabajoEnFeriado = true;
         }
       }
 
-      // Acumular horas trabajadas
       if (
         (tipoDia === 'Trabajo' || (tipoDia === 'Feriado' && trabajoEnFeriado)) &&
         registro.hora_entrada &&
@@ -126,18 +159,12 @@ export default function Reportes() {
           horasTrabajadas += 24;
         }
 
-        if (!diasUnicos[fecha].horasTrabajadas) {
-          diasUnicos[fecha].horasTrabajadas = horasTrabajadas;
-        } else {
-          diasUnicos[fecha].horasTrabajadas += horasTrabajadas;
-        }
+        diasUnicos[fecha].horasTrabajadas += horasTrabajadas;
       }
     });
 
-    // Inicializar total de horas trabajadas
     totalesTemp['Horas Trabajadas'] = 0;
 
-    // Contar días por tipo
     for (const fecha in diasUnicos) {
       const registroDia = diasUnicos[fecha];
       let tipoDia = registroDia.tipoDia;
@@ -154,15 +181,126 @@ export default function Reportes() {
         totalesTemp[tipoDia] += 1;
       }
 
-      // Sumar horas trabajadas
       if (registroDia.horasTrabajadas) {
         totalesTemp['Horas Trabajadas'] += registroDia.horasTrabajadas;
       }
     }
 
-    setTotales(totalesTemp);
+    return totalesTemp;
+  }, [reportes]);
+
+  // Función para eliminar un registro
+  const eliminarRegistro = async (id) => {
+    const confirmacion = confirm('¿Estás seguro de que deseas eliminar este registro?');
+
+    if (confirmacion) {
+      const { error } = await supabase.from('registros_horas').delete().eq('id', id);
+
+      if (error) {
+        console.error('Error al eliminar registro:', error);
+        alert('Error al eliminar el registro.');
+      } else {
+        // Actualizar la lista de reportes
+        setReportes(reportes.filter((registro) => registro.id !== id));
+        alert('Registro eliminado exitosamente.');
+      }
+    }
   };
 
+  // Función para eliminar reportes seleccionados
+  const eliminarReportesSeleccionados = async () => {
+    if (reportesSeleccionados.length === 0) {
+      alert('No has seleccionado ningún registro para eliminar.');
+      return;
+    }
+
+    const confirmacion = confirm('¿Estás seguro de que deseas eliminar los registros seleccionados?');
+
+    if (confirmacion) {
+      const { error } = await supabase
+        .from('registros_horas')
+        .delete()
+        .in('id', reportesSeleccionados);
+
+      if (error) {
+        console.error('Error al eliminar registros:', error);
+        alert('Error al eliminar los registros seleccionados.');
+      } else {
+        // Actualizar la lista de reportes
+        setReportes(reportes.filter((registro) => !reportesSeleccionados.includes(registro.id)));
+        setReportesSeleccionados([]);
+        alert('Registros eliminados exitosamente.');
+      }
+    }
+  };
+
+  // Función para abrir el modal de edición
+  const abrirModalEditar = (registro) => {
+    setReporteAEditar(registro);
+    setFormValues({
+      fecha: registro.fecha,
+      hora_entrada: registro.hora_entrada || '',
+      hora_salida: registro.hora_salida || '',
+      tipo_dia: registro.tipo_dia,
+      trabajo_en_feriado: registro.trabajo_en_feriado,
+    });
+    setIsEditarModalOpen(true);
+  };
+
+  // Función para cerrar el modal de edición
+  const cerrarModalEditar = () => {
+    setIsEditarModalOpen(false);
+    setReporteAEditar(null);
+  };
+
+  // Función para manejar cambios en el formulario de edición
+  const manejarCambioFormulario = (e) => {
+    const { name, value, type, checked } = e.target;
+    setFormValues((prev) => ({
+      ...prev,
+      [name]: type === 'checkbox' ? checked : value,
+    }));
+  };
+
+  // Función para guardar los cambios de edición
+  const guardarCambios = async () => {
+    const { fecha, hora_entrada, hora_salida, tipo_dia, trabajo_en_feriado } = formValues;
+
+    // Validaciones básicas
+    if (!fecha || !tipo_dia) {
+      alert('Por favor, completa todos los campos obligatorios.');
+      return;
+    }
+
+    const { error } = await supabase
+      .from('registros_horas')
+      .update({
+        fecha,
+        hora_entrada: hora_entrada || null,
+        hora_salida: hora_salida || null,
+        tipo_dia,
+        trabajo_en_feriado,
+      })
+      .eq('id', reporteAEditar.id);
+
+    if (error) {
+      console.error('Error al actualizar registro:', error);
+      alert('Error al actualizar el registro.');
+    } else {
+      // Actualizar la lista de reportes
+      setReportes(
+        reportes.map((registro) =>
+          registro.id === reporteAEditar.id
+            ? { ...registro, fecha, hora_entrada, hora_salida, tipo_dia, trabajo_en_feriado }
+            : registro
+        )
+      );
+      alert('Registro actualizado exitosamente.');
+      cerrarModalEditar();
+    }
+  };
+
+  // Generar reporte PDF
   const generarPDF = () => {
     const doc = new jsPDF();
 
@@ -171,12 +309,13 @@ export default function Reportes() {
     autoTable(doc, {
       head: [['Empleado', 'Fecha', 'Entrada', 'Salida', 'Tipo de Día']],
       body: reportes.map((registro) => [
-        registro.empleados.nombre + ' ' + registro.empleados.apellido,
+        `${registro.empleados.nombre} ${registro.empleados.apellido}`,
         registro.fecha,
         registro.hora_entrada || '-',
         registro.hora_salida || '-',
-        registro.tipo_dia +
-          (registro.trabajo_en_feriado ? ' (Trabajó en Feriado)' : ''),
+        `${registro.tipo_dia}${
+          registro.trabajo_en_feriado ? ' (Trabajó en Feriado)' : ''
+        }`,
       ]),
       startY: 30,
     });
@@ -200,47 +339,62 @@ export default function Reportes() {
       doc.text(linea, 20, finalY + 6 + index * 6);
     });
 
-    // Obtener el nombre del empleado
     let nombreEmpleado = 'Todos_los_Empleados';
 
     if (empleadoSeleccionado) {
-      const empleado = empleados.find((emp) => emp.id === empleadoSeleccionado);
+      const empleado = empleados.find(
+        (emp) => emp.id === empleadoSeleccionado
+      );
       if (empleado) {
         nombreEmpleado = `${empleado.nombre}_${empleado.apellido}`;
       }
     }
 
-    // Obtener el mes y año del reporte
-    let nombreMes = '';
-    if (fechaInicio) {
-      const dateInicio = new Date(fechaInicio);
-      const options = { month: 'long', year: 'numeric' };
-      nombreMes = dateInicio.toLocaleDateString('es-ES', options);
-    }
+    const options = { month: 'long', year: 'numeric' };
+    const date = new Date(`${selectedMonthYear}-01`);
+    const nombreMes = date.toLocaleDateString('es-ES', options);
 
-    // Crear el nombre del archivo
-    let nombreArchivo = `Reporte_${nombreEmpleado}`;
-    if (nombreMes) {
-      nombreArchivo += `_${nombreMes}`;
-    }
+    const nombreArchivo = `Reporte_${nombreEmpleado}_${nombreMes}.pdf`;
 
-    nombreArchivo += '.pdf';
-
-    // Guardar el PDF con el nombre especificado
     doc.save(nombreArchivo);
   };
 
-  return (
-    <div className="container mx-auto p-4">
-      <h2 className="text-2xl font-bold mb-4">Reportes</h2>
+  // Manejar selección de un reporte
+  const manejarSeleccion = (id) => {
+    if (reportesSeleccionados.includes(id)) {
+      setReportesSeleccionados(reportesSeleccionados.filter((selectedId) => selectedId !== id));
+    } else {
+      setReportesSeleccionados([...reportesSeleccionados, id]);
+    }
+  };
 
-      <div className="mb-4 grid grid-cols-1 md:grid-cols-4 gap-4">
+  // Manejar selección de todos los reportes
+  const manejarSeleccionTodos = () => {
+    if (reportesSeleccionados.length === reportes.length) {
+      setReportesSeleccionados([]);
+    } else {
+      const todosIds = reportes.map((registro) => registro.id);
+      setReportesSeleccionados(todosIds);
+    }
+  };
+
+  return (
+    <div className="p-6">
+      <h2 className="text-2xl font-semibold mb-6">Reportes</h2>
+
+      {/* Filtros */}
+      <div className="mb-6 grid grid-cols-1 md:grid-cols-4 gap-4">
+        {/* Empleado */}
         <div>
-          <label className="block">Selecciona un Empleado</label>
+          <label className="block text-gray-700">Selecciona un Empleado</label>
           <select
             value={empleadoSeleccionado || ''}
-            onChange={(e) => setEmpleadoSeleccionado(e.target.value || null)}
-            className="mt-1 block w-full border-gray-300 rounded-md"
+            onChange={(e) =>
+              setEmpleadoSeleccionado(
+                e.target.value ? parseInt(e.target.value) : null
+              )
+            }
+            className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2"
           >
             <option value="">Todos los Empleados</option>
             {empleados.map((empleado) => (
@@ -251,39 +405,68 @@ export default function Reportes() {
           </select>
         </div>
 
+        {/* Selector de Mes */}
         <div>
-          <label className="block">Fecha Inicio</label>
+          <label className="block text-gray-700">Mes</label>
+          <input
+            type="month"
+            value={selectedMonthYear}
+            onChange={(e) => setSelectedMonthYear(e.target.value)}
+            className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2"
+          />
+        </div>
+
+        {/* Fecha de Inicio */}
+        <div>
+          <label className="block text-gray-700">Fecha de Inicio</label>
           <input
             type="date"
             value={fechaInicio}
-            onChange={(e) => setFechaInicio(e.target.value)}
-            className="mt-1 block w-full border-gray-300 rounded-md"
+            readOnly
+            className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2 bg-gray-100"
           />
         </div>
 
+        {/* Fecha de Fin */}
         <div>
-          <label className="block">Fecha Fin</label>
+          <label className="block text-gray-700">Fecha de Fin</label>
           <input
             type="date"
             value={fechaFin}
-            onChange={(e) => setFechaFin(e.target.value)}
-            className="mt-1 block w-full border-gray-300 rounded-md"
+            readOnly
+            className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2 bg-gray-100"
           />
-        </div>
-
-        <div className="flex items-end">
-          <button
-            onClick={fetchReportes}
-            className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
-          >
-            Filtrar
-          </button>
         </div>
       </div>
 
-      <div className="mb-4">
-        <h3 className="text-xl font-bold mb-2">Totales</h3>
-        <ul>
+      {/* Botones de Acción */}
+      <div className="mb-6 flex flex-col md:flex-row md:items-center md:space-x-4 space-y-4 md:space-y-0">
+        {/* Botón Filtrar */}
+        <button
+          onClick={filtrarReportes}
+          className="bg-blue-500 text-white px-4 py-2 rounded-md hover:bg-blue-600"
+        >
+          Filtrar
+        </button>
+
+        {/* Botón Eliminar Seleccionados */}
+        <button
+          onClick={eliminarReportesSeleccionados}
+          className={`${
+            reportesSeleccionados.length === 0
+              ? 'bg-gray-400 cursor-not-allowed'
+              : 'bg-red-500 hover:bg-red-600'
+          } text-white px-4 py-2 rounded-md`}
+          disabled={reportesSeleccionados.length === 0}
+        >
+          Eliminar Seleccionados
+        </button>
+      </div>
+
+      {/* Totales */}
+      <div className="mb-6">
+        <h3 className="text-xl font-semibold mb-2">Totales</h3>
+        <ul className="list-disc list-inside">
           {Object.entries(totales).map(([key, value]) => {
             if (key === 'Horas Trabajadas') {
               const totalHours = Math.floor(value);
@@ -304,53 +487,180 @@ export default function Reportes() {
         </ul>
       </div>
 
+      {/* Tabla de Reportes */}
       <div className="overflow-x-auto">
-        <table className="table">
-          <thead className="table-header">
+        <table className="min-w-full bg-white border">
+          <thead>
             <tr>
-              <th className="table-cell">Empleado</th>
-              <th className="table-cell">Fecha</th>
-              <th className="table-cell">Entrada</th>
-              <th className="table-cell">Salida</th>
-              <th className="table-cell">Tipo de Día</th>
+              <th className="px-4 py-2 border">
+                <input
+                  type="checkbox"
+                  checked={reportesSeleccionados.length === reportes.length && reportes.length > 0}
+                  onChange={manejarSeleccionTodos}
+                />
+              </th>
+              <th className="px-4 py-2 border">Empleado</th>
+              <th className="px-4 py-2 border">Fecha</th>
+              <th className="px-4 py-2 border">Entrada</th>
+              <th className="px-4 py-2 border">Salida</th>
+              <th className="px-4 py-2 border">Tipo de Día</th>
+              <th className="px-4 py-2 border">Acciones</th>
             </tr>
           </thead>
           <tbody>
             {reportes.map((registro) => (
               <tr
                 key={registro.id}
-                className={`table-row ${
-                  registro.tipo_dia === 'Feriado' &&
-                  registro.trabajo_en_feriado
+                className={`${
+                  registro.tipo_dia === 'Feriado' && registro.trabajo_en_feriado
                     ? 'bg-yellow-100'
                     : ''
                 }`}
               >
-                <td className="table-cell">
+                <td className="px-4 py-2 border text-center">
+                  <input
+                    type="checkbox"
+                    checked={reportesSeleccionados.includes(registro.id)}
+                    onChange={() => manejarSeleccion(registro.id)}
+                  />
+                </td>
+                <td className="px-4 py-2 border">
                   {registro.empleados.nombre} {registro.empleados.apellido}
                 </td>
-                <td className="table-cell">{registro.fecha}</td>
-                <td className="table-cell">
+                <td className="px-4 py-2 border">{registro.fecha}</td>
+                <td className="px-4 py-2 border">
                   {registro.hora_entrada || '-'}
                 </td>
-                <td className="table-cell">
+                <td className="px-4 py-2 border">
                   {registro.hora_salida || '-'}
                 </td>
-                <td className="table-cell">
+                <td className="px-4 py-2 border">
                   {registro.tipo_dia}
                   {registro.trabajo_en_feriado
                     ? ' (Trabajó en Feriado)'
                     : ''}
                 </td>
+                <td className="px-4 py-2 border flex space-x-2">
+                  {/* Botón Editar */}
+                  <button
+                    onClick={() => abrirModalEditar(registro)}
+                    className="bg-green-500 text-white px-3 py-1 rounded-md hover:bg-green-600"
+                  >
+                    Editar
+                  </button>
+                  {/* Botón Eliminar */}
+                  <button
+                    onClick={() => eliminarRegistro(registro.id)}
+                    className="bg-red-500 text-white px-3 py-1 rounded-md hover:bg-red-600"
+                  >
+                    Eliminar
+                  </button>
+                </td>
               </tr>
             ))}
+
+            {/* Mostrar mensaje si no hay reportes */}
+            {reportes.length === 0 && (
+              <tr>
+                <td colSpan="7" className="px-4 py-2 border text-center">
+                  No hay reportes para mostrar.
+                </td>
+              </tr>
+            )}
           </tbody>
         </table>
       </div>
 
-      <button onClick={generarPDF} className="btn-secondary mt-4">
+      {/* Botón Descargar PDF */}
+      <button
+        onClick={generarPDF}
+        className="bg-gray-500 text-white px-4 py-2 rounded-md hover:bg-gray-600 mt-6"
+      >
         Descargar Reporte en PDF
       </button>
+
+      {/* Modal de Edición */}
+      {isEditarModalOpen && (
+        <div className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-50 z-50">
+          <div className="bg-white rounded-lg shadow-lg w-11/12 md:w-1/2 lg:w-1/3 p-6">
+            <h3 className="text-xl font-semibold mb-4">Editar Reporte</h3>
+            <form>
+              <div className="mb-4">
+                <label className="block text-gray-700">Fecha</label>
+                <input
+                  type="date"
+                  name="fecha"
+                  value={formValues.fecha}
+                  onChange={manejarCambioFormulario}
+                  className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2"
+                />
+              </div>
+              <div className="mb-4">
+                <label className="block text-gray-700">Hora de Entrada</label>
+                <input
+                  type="time"
+                  name="hora_entrada"
+                  value={formValues.hora_entrada}
+                  onChange={manejarCambioFormulario}
+                  className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2"
+                />
+              </div>
+              <div className="mb-4">
+                <label className="block text-gray-700">Hora de Salida</label>
+                <input
+                  type="time"
+                  name="hora_salida"
+                  value={formValues.hora_salida}
+                  onChange={manejarCambioFormulario}
+                  className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2"
+                />
+              </div>
+              <div className="mb-4">
+                <label className="block text-gray-700">Tipo de Día</label>
+                <select
+                  name="tipo_dia"
+                  value={formValues.tipo_dia}
+                  onChange={manejarCambioFormulario}
+                  className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2"
+                >
+                  <option value="">Selecciona un Tipo de Día</option>
+                  <option value="Falta Injustificada">Falta Injustificada</option>
+                  <option value="Falta Justificada">Falta Justificada</option>
+                  <option value="Suspensión">Suspensión</option>
+                  <option value="Vacaciones">Vacaciones</option>
+                  <option value="Feriado">Feriado</option>
+                  <option value="Descanso">Descanso</option>
+                  <option value="Trabajo">Trabajo</option>
+                </select>
+              </div>
+              <div className="mb-4 flex items-center">
+                <input
+                  type="checkbox"
+                  name="trabajo_en_feriado"
+                  checked={formValues.trabajo_en_feriado}
+                  onChange={manejarCambioFormulario}
+                  className="mr-2"
+                />
+                <label className="text-gray-700">Trabajó en Feriado</label>
+              </div>
+            </form>
+            <div className="flex justify-end space-x-4">
+              <button
+                onClick={cerrarModalEditar}
+                className="bg-gray-300 text-gray-700 px-4 py-2 rounded-md hover:bg-gray-400"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={guardarCambios}
+                className="bg-blue-500 text-white px-4 py-2 rounded-md hover:bg-blue-600"
+              >
+                Guardar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
